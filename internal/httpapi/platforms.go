@@ -24,9 +24,11 @@ func (s *Server) handleCreatePlatform(c *reqCtx) error {
 	if err != nil {
 		return err
 	}
-	s.logs.Add("create", "新增平台「"+created.Name+"」", logs.Options{
-		PlatformID:   created.ID,
-		PlatformName: created.Name,
+	createdID := jsval.Str(created["id"])
+	createdName := jsval.Str(created["name"])
+	s.logs.Add("create", "新增平台「"+createdName+"」", logs.Options{
+		PlatformID:   createdID,
+		PlatformName: createdName,
 	})
 	writeJSON(c.W, 201, created)
 	return nil
@@ -88,9 +90,11 @@ func (s *Server) handleUpdatePlatform(c *reqCtx) error {
 	if err != nil {
 		return err
 	}
-	s.logs.Add("update", "更新平台「"+updated.Name+"」", logs.Options{
-		PlatformID:   updated.ID,
-		PlatformName: updated.Name,
+	updatedID := jsval.Str(updated["id"])
+	updatedName := jsval.Str(updated["name"])
+	s.logs.Add("update", "更新平台「"+updatedName+"」", logs.Options{
+		PlatformID:   updatedID,
+		PlatformName: updatedName,
 	})
 	writeJSON(c.W, 200, updated)
 	return nil

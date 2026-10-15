@@ -312,14 +312,30 @@ func isPresetLike(obj map[string]any) bool {
 	return ok
 }
 
-// mergePlatform 复刻 `{...list[idx], ...p}`：p 的字段覆盖旧值；p 缺 response/display 时保留旧值。
+// mergePlatform 复刻 `{...list[idx], ...p}`：p 的已知字段覆盖旧值；p 缺 response/display 时
+// 保留旧值；旧记录里的未知键（如 preset）保留。
 func mergePlatform(old, p model.Platform) model.Platform {
-	out := p
-	if p.Response == nil {
-		out.Response = old.Response
+	out := old.Clone()
+	out.ID = p.ID
+	out.Name = p.Name
+	out.Request = p.Request
+	out.Handler = p.Handler
+	out.Extractor = p.Extractor
+	out.Parse = p.Parse
+	out.Format = p.Format
+	out.CreatedAt = p.CreatedAt
+	if p.Response != nil {
+		out.Response = p.Response
 	}
-	if p.Display == nil {
-		out.Display = old.Display
+	if p.Display != nil {
+		out.Display = p.Display
+	}
+	out.MarkPresent("id", "name", "request", "handler", "extractor", "parse", "format", "createdAt")
+	if p.Response != nil {
+		out.MarkPresent("response")
+	}
+	if p.Display != nil {
+		out.MarkPresent("display")
 	}
 	return out
 }

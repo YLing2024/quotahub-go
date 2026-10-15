@@ -229,9 +229,11 @@ func textField(v any) string {
 
 // applyPatch 复刻旧 pickConfig：只覆盖请求里出现的字段；保存 handler 时清掉旧 parse/extractor。
 func applyPatch(old model.Platform, body map[string]any) model.Platform {
-	next := old
+	next := old.Clone()
+	touched := make([]string, 0, 4)
 	if v, ok := body["name"]; ok {
 		next.Name = strings.TrimSpace(jsval.Str(v))
+		touched = append(touched, "name")
 	}
 	if v, ok := body["request"]; ok {
 		if m, isObj := jsval.Obj(v); isObj {
@@ -239,25 +241,32 @@ func applyPatch(old model.Platform, body map[string]any) model.Platform {
 		} else {
 			next.Request = map[string]any{}
 		}
+		touched = append(touched, "request")
 	}
 	if v, ok := body["handler"]; ok {
 		next.Handler = jsval.Str(v)
 		next.Extractor = ""
 		next.Parse = ""
+		touched = append(touched, "handler", "extractor", "parse")
 	} else {
 		if v, ok := body["extractor"]; ok {
 			next.Extractor = jsval.Str(v)
+			touched = append(touched, "extractor")
 		}
 		if v, ok := body["parse"]; ok {
 			next.Parse = jsval.Str(v)
+			touched = append(touched, "parse")
 		}
 	}
 	if v, ok := body["format"]; ok {
 		next.Format = strings.TrimSpace(jsval.StrOr(v, ""))
+		touched = append(touched, "format")
 	}
 	if v, ok := body["url"]; ok {
 		next.URL = truncate(strings.TrimSpace(jsval.StrOr(v, "")), 500)
+		touched = append(touched, "url")
 	}
+	next.MarkPresent(touched...)
 	return next
 }
 
@@ -271,33 +280,26 @@ func assertHasHandler(p model.Platform) error {
 	return nil
 }
 
-// toPublic 复刻旧 toPublic：剔除 display，response 内剔除 prefix/suffix，全空则省略 response。
+// toPublic 复刻旧 toPublic：忠实保留源键集合，剔除 display，response 内剔除
+// prefix/suffix（剔除后为空则整键省略）。
 func toPublic(p model.Platform) model.PublicPlatform {
-	var response map[string]any
-	if p.Response != nil {
-		res := map[string]any{}
-		for k, v := range p.Response {
+	obj := p.Object()
+	delete(obj, "display")
+	if res, ok := obj["response"].(map[string]any); ok {
+		pruned := map[string]any{}
+		for k, v := range res {
 			if k == "prefix" || k == "suffix" {
 				continue
 			}
-			res[k] = v
+			pruned[k] = v
 		}
-		if len(res) > 0 {
-			response = res
+		if len(pruned) > 0 {
+			obj["response"] = pruned
+		} else {
+			delete(obj, "response")
 		}
 	}
-	return model.PublicPlatform{
-		ID:        p.ID,
-		Name:      p.Name,
-		Request:   p.Request,
-		Handler:   p.Handler,
-		Extractor: p.Extractor,
-		Parse:     p.Parse,
-		Format:    p.Format,
-		Response:  response,
-		URL:       p.URL,
-		CreatedAt: p.CreatedAt,
-	}
+	return model.PublicPlatform(obj)
 }
 
 func truncate(s string, max int) string {
