@@ -17,6 +17,8 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"sort"
+	"strconv"
 	"strings"
 
 	"quotahub-go/internal/auth"
@@ -111,6 +113,11 @@ type route struct {
 }
 
 // ServeHTTP 实现 http.Handler。
+//
+// 分发严格对齐旧实现 Express app 的层序：express.json() → 公开的 GET /api/auth-mode →
+// 内置认证端点（含 sso 守卫）→ /api 鉴权中间件 → 业务路由 → Express 默认 404。
+// 鉴权中间件排在业务路由之前，因此「方法回退」（HEAD 走 GET 处理器、OPTIONS 自动汇总
+// Allow）发生在鉴权之后：未登录时任何 /api/* 都先落 401。
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := decodeJSONBody(r)
 	if err != nil {
@@ -124,22 +131,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if rt, params, ok := matchRoute(routes, r.Method, r.URL.Path, func(rt route) bool { return rt.public }); ok {
-		c.Params = params
-		s.run(rt, c)
-		return
-	}
-
-	if rt, params, ok := matchRoute(routes, r.Method, r.URL.Path, func(rt route) bool { return rt.builtinOnly }); ok {
+	// /api/auth 挂在 /api 鉴权中间件之前，其 builtinOnly 守卫对任意方法/子路径生效；
+	// 命中路由或自动 OPTIONS 也在鉴权之前收尾。
+	if isAuthAPIPath(r.URL.Path) {
 		if s.cfg.AuthMode != config.AuthBuiltin {
 			writeJSON(w, 404, map[string]any{"error": "未找到"})
 			return
 		}
-		c.Params = params
-		s.run(rt, c)
-		return
+		if s.dispatch(w, r, c, onlyBuiltin) {
+			return
+		}
+		if r.Method == http.MethodOptions && s.dispatchOptions(w, r, onlyBuiltin) {
+			return
+		}
+		// 未命中：继续走 /api 鉴权（对齐 Express 层序）。
+	} else if r.URL.Path == publicAuthModePath && isReadMethod(r.Method) {
+		// 公开路由只对 GET/HEAD 免鉴权；OPTIONS 及其余方法继续走鉴权与自动 OPTIONS。
+		if s.dispatch(w, r, c, onlyPublic) {
+			return
+		}
 	}
 
+	// 其余 /api/*：先鉴权（未登录一律 401），再做方法回退与 404 判定。
 	user := s.auth.User(r)
 	if user == "" {
 		writeJSON(w, 401, map[string]any{"error": "未登录"})
@@ -147,12 +160,44 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	c.User = user
 
-	if rt, params, ok := matchRoute(routes, r.Method, r.URL.Path, func(rt route) bool { return !rt.public && !rt.builtinOnly }); ok {
-		c.Params = params
-		s.run(rt, c)
+	if s.dispatch(w, r, c, onlyAuthed) {
+		return
+	}
+	if r.Method == http.MethodOptions && s.dispatchOptions(w, r, nil) {
 		return
 	}
 	s.notFound(w, r)
+}
+
+// publicAuthModePath 是唯一免鉴权的公开路由路径。
+const publicAuthModePath = "/api/auth-mode"
+
+// isReadMethod 判断是否为读取方法（GET/HEAD）；公开路由与静态资源都只认这两种。
+func isReadMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead
+}
+
+// dispatch 在给定分组内做「方法 + 路径」匹配；命中即执行处理器并返回 true。
+// HEAD 会回退到 GET 处理器（对齐 Express route 的 head→get 语义）。
+func (s *Server) dispatch(w http.ResponseWriter, r *http.Request, c *reqCtx, accept func(route) bool) bool {
+	rt, params, ok := matchRoute(routes, r.Method, r.URL.Path, accept)
+	if !ok {
+		return false
+	}
+	c.Params = params
+	s.run(rt, c)
+	return true
+}
+
+// dispatchOptions 处理 Express 的自动 OPTIONS：汇总该分组内所有「路径匹配」路由允许的方法，
+// 非空则落 200 文本响应并返回 true，否则留给上层继续（返回 false）。
+func (s *Server) dispatchOptions(w http.ResponseWriter, r *http.Request, accept func(route) bool) bool {
+	methods := allowedMethods(routes, r.URL.Path, accept)
+	if len(methods) == 0 {
+		return false
+	}
+	writeOptions(w, methods)
+	return true
 }
 
 // run 执行处理器并统一落错误响应。
@@ -179,6 +224,11 @@ func (s *Server) writeErr(w http.ResponseWriter, err error) {
 
 // --- 路由匹配 ---
 
+// 路由分组谓词：对应 Express 里三类挂载顺序（公开 / 内置认证 / 其余鉴权）。
+func onlyPublic(rt route) bool  { return rt.public }
+func onlyBuiltin(rt route) bool { return rt.builtinOnly }
+func onlyAuthed(rt route) bool  { return !rt.public && !rt.builtinOnly }
+
 // matchRoute 按登记顺序找首个方法 + 路径都命中的路由，并抽取 `:param`。
 func matchRoute(table []route, method, urlPath string, accept func(route) bool) (route, map[string]string, bool) {
 	for _, rt := range table {
@@ -186,7 +236,7 @@ func matchRoute(table []route, method, urlPath string, accept func(route) bool) 
 			continue
 		}
 		patternMethod, patternPath := splitPattern(rt.pattern)
-		if patternMethod != method {
+		if !methodMatches(patternMethod, method) {
 			continue
 		}
 		if params, ok := matchPath(patternPath, urlPath); ok {
@@ -194,6 +244,47 @@ func matchRoute(table []route, method, urlPath string, accept func(route) bool) 
 		}
 	}
 	return route{}, nil, false
+}
+
+// methodMatches 判断请求方法是否命中某条路由登记的方法。
+//
+// 对齐 Express：HEAD 请求回退到 GET 处理器（route._handlesMethod 把 head 归一为 get）。
+func methodMatches(patternMethod, requestMethod string) bool {
+	if patternMethod == requestMethod {
+		return true
+	}
+	return requestMethod == http.MethodHead && patternMethod == http.MethodGet
+}
+
+// allowedMethods 汇总路径匹配的全部路由允许的方法，去重后按字母序排序。
+//
+// 对齐 Express 自动 OPTIONS：逐个匹配到的 Route 取其注册方法，并为存在 GET 的路由补上 HEAD；
+// 最终在 sendOptionsResponse 里去重、排序（所以 `Allow` 与响应体同串，形如 `GET, HEAD, POST`）。
+// accept 为 nil 表示不限分组。
+func allowedMethods(table []route, urlPath string, accept func(route) bool) []string {
+	if accept == nil {
+		accept = func(route) bool { return true }
+	}
+	set := map[string]struct{}{}
+	for _, rt := range table {
+		if !accept(rt) {
+			continue
+		}
+		patternMethod, patternPath := splitPattern(rt.pattern)
+		if _, ok := matchPath(patternPath, urlPath); !ok {
+			continue
+		}
+		set[patternMethod] = struct{}{}
+		if patternMethod == http.MethodGet {
+			set[http.MethodHead] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(set))
+	for m := range set {
+		out = append(out, m)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func splitPattern(pattern string) (string, string) {
@@ -235,6 +326,11 @@ func splitSegments(p string) []string {
 // isAPIPath 判断是否属于管理面 API（按段边界，避免 /apitest 被误判）。
 func isAPIPath(p string) bool {
 	return p == "/api" || strings.HasPrefix(p, "/api/")
+}
+
+// isAuthAPIPath 判断是否属于内置认证挂载 /api/auth（按段边界，`/api/auth-mode` 不算）。
+func isAuthAPIPath(p string) bool {
+	return p == "/api/auth" || strings.HasPrefix(p, "/api/auth/")
 }
 
 // --- 请求体 / 响应体编解码 ---
@@ -288,7 +384,7 @@ func isJSONContentType(ct string) bool {
 	return mediaType == "application/json"
 }
 
-// writeJSON 以 Express 风格落 JSON：不转义 HTML、无多余空白、带 charset。
+// writeJSON 以 Express 风格落 JSON：不转义 HTML、无多余空白、带 charset 与 Content-Length。
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	body, err := marshalJSON(v)
 	if err != nil {
@@ -298,8 +394,21 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	w.WriteHeader(status)
 	_, _ = w.Write(body)
+}
+
+// writeOptions 落 Express 自动 OPTIONS 响应：`Content-Type: text/plain`、`Allow` 头与
+// 响应体同为 `methods` 串（逗号 + 空格分隔、按字母序），并显式给出 `Content-Length`。
+func writeOptions(w http.ResponseWriter, methods []string) {
+	allow := strings.Join(methods, ", ")
+	w.Header().Set("Allow", allow)
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Length", strconv.Itoa(len(allow)))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, allow)
 }
 
 // marshalJSON 序列化但保留 `<`/`>`/`&` 原样（JSON.stringify 口径）。
@@ -362,14 +471,26 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, file)
 }
 
-// notFound 输出 Express 风格的 404（`Cannot GET /path` HTML）。
+// notFound 输出 Express 风格的 404（finalhandler 的 `Cannot METHOD /path` HTML 页）。
 func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
-	body := fmt.Sprintf("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot %s %s</pre>\n</body>\n</html>\n", r.Method, r.URL.Path)
+	body := fmt.Sprintf("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot %s %s</pre>\n</body>\n</html>\n", r.Method, escapeHTML(r.URL.Path))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	w.Header().Set("Content-Security-Policy", "default-src 'none'")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusNotFound)
 	if r.Method != http.MethodHead {
 		_, _ = io.WriteString(w, body)
 	}
+}
+
+// escapeHTML 复刻 finalhandler 所用 escape-html 的实体转义（& < > " '）。
+func escapeHTML(s string) string {
+	return strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&quot;",
+		"'", "&#39;",
+	).Replace(s)
 }
