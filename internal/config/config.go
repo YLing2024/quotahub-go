@@ -1,15 +1,14 @@
 // Package config 负责 quotahub-go 的环境变量解析与校验。
 //
 // 口径逐项对齐旧实现 server/src/config.ts：键名、默认值、取值域、非法 AUTH_MODE 回落
-// builtin、沙箱超时钳制到 100~30000ms、会话 TTL 上限 720 小时。差异只有新增的数据库选择键
-// （DB_DRIVER 等，见 docs/DB.md）。本包只读环境变量，不碰任何文件。
+// builtin、沙箱超时钳制到 100~30000ms、会话 TTL 上限 720 小时。差异只有新增的数据库
+// 连接键（DB_*，运行时仅 MySQL，见 docs/DB.md）。本包只读环境变量，不碰任何文件。
 package config
 
 import (
 	"fmt"
 	"math"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -22,16 +21,6 @@ const (
 	AuthBuiltin AuthMode = "builtin"
 	// AuthSSO 关掉自带口令，身份只看前置网关注入的 X-Auth-User。
 	AuthSSO AuthMode = "sso"
-)
-
-// DBDriver 是数据库方言。
-type DBDriver string
-
-const (
-	// DBDriverSQLite 纯 Go SQLite（默认，零额外配置）。
-	DBDriverSQLite DBDriver = "sqlite"
-	// DBDriverMySQL 需 DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD 或一条 DB_DSN。
-	DBDriverMySQL DBDriver = "mysql"
 )
 
 // Config 是运行时配置快照；时间字段为秒/毫秒整数。
@@ -53,9 +42,7 @@ type Config struct {
 	// SessionTtlSeconds 为 builtin 会话有效期（秒）。
 	SessionTtlSeconds int
 
-	// 数据库选择与连接参数（本次新增；默认 sqlite）。
-	DBDriver   DBDriver
-	DBPath     string
+	// 数据库连接参数（运行时仅 MySQL）。DBDSN 非空则整体覆盖分段参数。
 	DBHost     string
 	DBPort     int
 	DBName     string
@@ -104,7 +91,7 @@ func Load(get func(string) string) (*Config, error) {
 		adminUser = "admin"
 	}
 
-	db, err := loadDB(get, dataDir)
+	db, err := loadDB(get)
 	if err != nil {
 		return nil, err
 	}
@@ -121,8 +108,6 @@ func Load(get func(string) string) (*Config, error) {
 		AdminUser:         adminUser,
 		AdminPassword:     get("QUOTAHUB_ADMIN_PASSWORD"),
 		SessionTtlSeconds: pickSessionTTL(get("QUOTAHUB_SESSION_TTL_HOURS")),
-		DBDriver:          db.driver,
-		DBPath:            db.path,
 		DBHost:            db.host,
 		DBPort:            db.port,
 		DBName:            db.name,
@@ -132,17 +117,7 @@ func Load(get func(string) string) (*Config, error) {
 	}, nil
 }
 
-// MonitorDBPath 返回 SQLite 库文件路径（默认 <数据目录>/monitor.db）。
-func (c *Config) MonitorDBPath() string {
-	if c.DBPath != "" {
-		return c.DBPath
-	}
-	return filepath.Join(c.DataDir, "monitor.db")
-}
-
 type dbOptions struct {
-	driver   DBDriver
-	path     string
 	host     string
 	port     int
 	name     string
@@ -151,43 +126,23 @@ type dbOptions struct {
 	dsn      string
 }
 
-// loadDB 解析数据库选择。默认 sqlite；只有 DB_DRIVER=mysql 时才读取 MySQL 键
-// （sqlite 分支不加载驱动、不建连接、不受影响）。
-func loadDB(get func(string) string, dataDir string) (dbOptions, error) {
-	raw := strings.ToLower(strings.TrimSpace(get("DB_DRIVER")))
-	switch raw {
-	case "", "sqlite":
-		path := strings.TrimSpace(get("DB_PATH"))
-		if path == "" {
-			path = filepath.Join(dataDir, "monitor.db")
-		}
-		return dbOptions{driver: DBDriverSQLite, path: path}, nil
-	case "mysql":
-		dsn := strings.TrimSpace(get("DB_DSN"))
-		if dsn != "" {
-			return dbOptions{driver: DBDriverMySQL, dsn: dsn}, nil
-		}
-		host := strings.TrimSpace(get("DB_HOST"))
-		name := strings.TrimSpace(get("DB_NAME"))
-		user := strings.TrimSpace(get("DB_USER"))
-		if host == "" || name == "" || user == "" {
-			return dbOptions{}, &ConfigError{Message: "DB_DRIVER=mysql 需要 DB_HOST/DB_NAME/DB_USER（或一条 DB_DSN）"}
-		}
-		port, err := pickInt(get("DB_PORT"), "DB_PORT", 3306, 1, 65535)
-		if err != nil {
-			return dbOptions{}, err
-		}
-		return dbOptions{
-			driver:   DBDriverMySQL,
-			host:     host,
-			port:     port,
-			name:     name,
-			user:     user,
-			password: get("DB_PASSWORD"),
-		}, nil
-	default:
-		return dbOptions{}, &ConfigError{Message: fmt.Sprintf("DB_DRIVER 只能是 sqlite / mysql，当前为「%s」", raw)}
+// loadDB 解析 MySQL 连接参数。默认指本机（127.0.0.1:3306）；口令只从环境变量注入。
+// 给了 DB_DSN 就整体走它，其余分段键可省略。
+func loadDB(get func(string) string) (dbOptions, error) {
+	if dsn := strings.TrimSpace(get("DB_DSN")); dsn != "" {
+		return dbOptions{dsn: dsn}, nil
 	}
+	port, err := pickInt(get("DB_PORT"), "DB_PORT", 3306, 1, 65535)
+	if err != nil {
+		return dbOptions{}, err
+	}
+	return dbOptions{
+		host:     trimOr(get("DB_HOST"), "127.0.0.1"),
+		port:     port,
+		name:     trimOr(get("DB_NAME"), "quotahub"),
+		user:     trimOr(get("DB_USER"), "quotahub"),
+		password: get("DB_PASSWORD"),
+	}, nil
 }
 
 // pickScriptTimeout 复刻旧 config.ts 的 QUOTAHUB_SCRIPT_TIMEOUT_MS 语义：
@@ -255,11 +210,6 @@ func trimOr(raw, fallback string) string {
 
 // Describe 生成启动摘要（不含任何敏感值）。
 func (c *Config) Describe() string {
-	dbDesc := string(c.DBDriver)
-	if c.DBDriver == DBDriverSQLite {
-		dbDesc += " " + c.MonitorDBPath()
-	} else if c.DBName != "" {
-		dbDesc += " " + c.DBName
-	}
+	dbDesc := "mysql " + c.DBName + "@" + c.DBHost + ":" + strconv.Itoa(c.DBPort)
 	return fmt.Sprintf("监听 http://%s:%d | 认证模式 %s | 数据库 %s", c.Host, c.Port, c.AuthMode, dbDesc)
 }

@@ -2,77 +2,78 @@ package store
 
 import "context"
 
-// ColumnSpec 描述一个可增量补齐的列：两库类型显式给出（不下沉成公共子集）。
-type ColumnSpec struct {
-	Name       string
-	SQLiteType string
-	MySQLType  string
+// ddl 是建表语句（幂等）。`time` 为 UTC ISO 字符串 VARCHAR(32)，value 为 DOUBLE，
+// value_text 为旧版本遗留列（保留，不写入）。字符集与排序规则固定 utf8mb4。
+var ddl = []string{
+	`CREATE TABLE IF NOT EXISTS history_samples (
+		id          BIGINT NOT NULL AUTO_INCREMENT,
+		platform_id VARCHAR(64) NOT NULL,
+		time        VARCHAR(32) NOT NULL,
+		value       DOUBLE NOT NULL,
+		value_text  TEXT NULL,
+		PRIMARY KEY (id),
+		KEY idx_history_platform_time (platform_id, time)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+	`CREATE TABLE IF NOT EXISTS users (
+		id            BIGINT NOT NULL AUTO_INCREMENT,
+		username      VARCHAR(190) NOT NULL,
+		password_hash VARCHAR(255) NOT NULL,
+		created_at    VARCHAR(32) NOT NULL,
+		PRIMARY KEY (id),
+		UNIQUE KEY uk_users_username (username)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+	`CREATE TABLE IF NOT EXISTS sessions (
+		token      VARCHAR(64) NOT NULL,
+		username   VARCHAR(190) NOT NULL,
+		created_at VARCHAR(32) NOT NULL,
+		expires_at VARCHAR(32) NOT NULL,
+		PRIMARY KEY (token),
+		KEY idx_sessions_expires (expires_at)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+	`CREATE TABLE IF NOT EXISTS schema_version (
+		version    INT NOT NULL,
+		applied_at BIGINT NOT NULL,
+		PRIMARY KEY (version)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 }
+
+// migrateVersion 是记录进 schema_version 的版本号（DDL 幂等，重复执行无副作用）。
+const migrateVersion = 1
 
 // alterSpecs 是各表用于「增量补列」的列定义。只列需要防老库缺列的列；
-// 建表语句见各方言 Migrate（CREATE TABLE IF NOT EXISTS）。
-//
-// 老库可能缺 history_samples.value_text（旧版本才有该列），补齐后新代码仍不写入。
-var alterSpecs = map[string][]ColumnSpec{
-	"history_samples": {
-		{Name: "value_text", SQLiteType: "TEXT", MySQLType: "TEXT NULL"},
-	},
+// 建表语句见 ddl（CREATE TABLE IF NOT EXISTS）。旧库可能缺 history_samples.value_text，
+// 补齐后新代码仍不写入。
+var alterSpecs = map[string][]string{
+	"history_samples": {"value_text TEXT NULL"},
 }
 
-// ensureOrder 是执行「增量补列」的表顺序（确定性，便于复现）。
-var ensureOrder = []string{"history_samples"}
+// migrateTables 是执行「增量补列」的表顺序（确定性，便于复现）。
+var migrateTables = []string{"history_samples"}
 
-// MigrateTables 返回需要执行增量补列的表（顺序确定）。
-func MigrateTables() []string { return ensureOrder }
-
-// EnsureAlterColumns 逐表补齐缺失列（幂等）。name 为方言名。
-func EnsureAlterColumns(ctx context.Context, d Dialect, q Querier, table string) error {
+// ensureAlterColumns 逐表补齐缺失列（幂等）。
+func ensureAlterColumns(ctx context.Context, q Querier, table string) error {
 	for _, spec := range alterSpecs[table] {
-		exists, err := d.ColumnExists(ctx, q, table, spec.Name)
+		name, typ := splitColumnDef(spec)
+		exists, err := columnExists(ctx, q, table, name)
 		if err != nil {
 			return err
 		}
 		if exists {
 			continue
 		}
-		typ := spec.MySQLType
-		if d.Name() == "sqlite" {
-			typ = spec.SQLiteType
-		}
-		if _, err := q.ExecContext(ctx, "ALTER TABLE "+table+" ADD COLUMN "+spec.Name+" "+typ); err != nil {
+		if _, err := q.ExecContext(ctx, "ALTER TABLE "+table+" ADD COLUMN "+name+" "+typ); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// CopyTables 是跨库搬运的表顺序。
-var CopyTables = []string{"history_samples", "users", "sessions"}
-
-// copyColumns 是各表的显式列顺序（与建表列一致，供逐行拷贝）。
-var copyColumns = map[string][]string{
-	"history_samples": {"id", "platform_id", "time", "value", "value_text"},
-	"users":           {"id", "username", "password_hash", "created_at"},
-	"sessions":        {"token", "username", "created_at", "expires_at"},
+// splitColumnDef 把 "name TYPE ..." 定义拆成列名与类型（列定义均为受控常量，无注入面）。
+func splitColumnDef(def string) (name, typ string) {
+	for i := 0; i < len(def); i++ {
+		if def[i] == ' ' {
+			return def[:i], def[i+1:]
+		}
+	}
+	return def, ""
 }
-
-// floatColumns 是跨库搬运时需要归一化为 float64 的列（消除驱动对数值列的返回差异）。
-var floatColumns = map[string]bool{
-	"history_samples.value": true,
-}
-
-// keyColumns 是 upsert 的冲突键。
-var keyColumns = map[string][]string{
-	"history_samples": {"id"},
-	"users":           {"id"},
-	"sessions":        {"token"},
-}
-
-// CopyColumns 返回某表的拷贝列顺序。
-func CopyColumns(table string) []string { return copyColumns[table] }
-
-// KeyColumns 返回某表的 upsert 键列。
-func KeyColumns(table string) []string { return keyColumns[table] }
-
-// IsFloatColumn 判断某列是否为跨库需归一化为 float64 的数值列。
-func IsFloatColumn(table, column string) bool { return floatColumns[table+"."+column] }
