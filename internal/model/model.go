@@ -5,8 +5,6 @@
 // platform.format 源码得到，后端只透传源码（纯数值语义）。
 package model
 
-import "encoding/json"
-
 // Platform 是平台配置的存储形态（含 legacy 字段 display / response.prefix/suffix）。
 type Platform struct {
 	ID        string         `json:"id"`
@@ -18,9 +16,9 @@ type Platform struct {
 	Format    string         `json:"format"`
 	Response  map[string]any `json:"response,omitempty"`
 	// Display 已弃用，仅为旧导出文件导入兼容保留，不渲染、不再被导出。
-	Display   json.RawMessage `json:"display,omitempty"`
-	URL       string          `json:"url"`
-	CreatedAt string          `json:"createdAt"`
+	Display   map[string]any `json:"display,omitempty"`
+	URL       string         `json:"url"`
+	CreatedAt string         `json:"createdAt"`
 }
 
 // PublicPlatform 是平台对外输出形态（不含 display，response 已剔除 prefix/suffix）。
