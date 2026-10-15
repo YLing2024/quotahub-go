@@ -83,9 +83,14 @@ func (m *Monitor) Validate(ctx context.Context, target FetchTarget) (float64, er
 	return m.fetcher.FetchBalance(ctx, target)
 }
 
+// Test 用平台存储配置做一次抓取（POST /api/platforms/:id/test），不写历史、不记错误态。
+func (m *Monitor) Test(ctx context.Context, p model.Platform) (float64, error) {
+	return m.fetcher.FetchBalance(ctx, TargetOf(p))
+}
+
 // Collect 抓取单个平台：成功写采样点并清除错误态；失败记录运行时错误态。
 func (m *Monitor) Collect(ctx context.Context, p model.Platform) Outcome {
-	value, err := m.fetcher.FetchBalance(ctx, targetOf(p))
+	value, err := m.fetcher.FetchBalance(ctx, TargetOf(p))
 	if err == nil {
 		fetchedAt := timex.NowISO()
 		if _, recErr := m.history.RecordSample(ctx, p.ID, value, fetchedAt); recErr != nil {
@@ -276,8 +281,8 @@ func (m *Monitor) markRunFinishedLocked(reason string) {
 	m.lastRunReason = &reason
 }
 
-// targetOf 把平台存储形态映射为抓取目标。
-func targetOf(p model.Platform) FetchTarget {
+// TargetOf 把平台存储形态映射为抓取目标。
+func TargetOf(p model.Platform) FetchTarget {
 	return FetchTarget{
 		Request:   p.Request,
 		Handler:   p.Handler,
