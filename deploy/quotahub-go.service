@@ -1,0 +1,18 @@
+[Unit]
+Description=QuotaHub 额度看板（Go 重写）
+After=network.target
+
+[Service]
+Type=simple
+# 只监听 127.0.0.1，对外由 nginx 反代
+WorkingDirectory=/opt/quotahub-go
+EnvironmentFile=-/etc/quotahub-go.env
+ExecStart=/opt/quotahub-go/quotahub-go
+Restart=always
+RestartSec=3
+# 最小权限：专用非 root 用户
+User=quotahub
+Group=quotahub
+
+[Install]
+WantedBy=multi-user.target

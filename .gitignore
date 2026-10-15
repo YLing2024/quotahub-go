@@ -1,0 +1,15 @@
+# 构建产物
+/quotahub-go
+/web/dist/
+/web/node_modules/
+/web/.vite/
+
+# 运行时数据（凭据、库文件不入库）
+/data/
+
+# 验收临时产物
+/.acceptance/
+
+# 编辑器 / 系统
+.DS_Store
+*.log
