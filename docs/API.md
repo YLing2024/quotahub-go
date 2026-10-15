@@ -26,6 +26,38 @@
   `401 {"error":"未登录"}`，鉴权通过后才判定资源是否存在（未知 `/api/*` → 404 HTML）。
 - 会话有效期 `QUOTAHUB_SESSION_TTL_HOURS`（默认 12，上限 720）；命中即滑动续期。
 
+## 路由与方法回退
+
+分发顺序逐条对齐旧实现 Express app 的层序：`express.json()` 解析请求体 → 公开路由 →
+内置认证端点 → `/api` 鉴权中间件 → 业务路由 → Express 默认 404。鉴权中间件排在业务路由
+之前，因此本服务是**先鉴权、再做方法回退**。
+
+- 公开路由只有 `GET /api/auth-mode`，且仅 `GET`/`HEAD` 免鉴权；`OPTIONS /api/auth-mode`
+  会继续走到鉴权（未登录 `401`），已登录才落自动 OPTIONS。
+- 内置认证端点 `/api/auth/{login,logout,me}` 的守卫与自动 OPTIONS 在鉴权之前：`builtin` 下
+  `OPTIONS /api/auth/login` → `Allow: POST`、`OPTIONS /api/auth/me` → `Allow: GET, HEAD`；
+  `sso` 下 `/api/auth/*` 任意方法、任意子路径（含未注册的 `/api/auth/nope`）一律
+  `404 {"error":"未找到"}`。
+- 其余 `/api/*` 先鉴权：**未登录时无论什么方法都先 `401 {"error":"未登录"}`**，鉴权通过后再
+  做方法回退与 404 判定。
+
+方法回退规则（与 Express 逐条一致）：
+
+- **HEAD 走 GET 处理器**：状态码与响应头同 `GET`，响应体为空，但 `Content-Length` 仍等于
+  GET 响应体长度（HTTP 对 HEAD 不返回体）。
+- **自动 OPTIONS**：对该路径匹配的全部路由汇总允许的方法，去重后按字母序排序、以 `, `
+  连接；响应 `200`、`Content-Type: text/plain`，`Allow` 头与响应体同为该串；存在 `GET` 的
+  路由自动补 `HEAD`。同一路径上字面量段与 `:id` 段都会参与汇总，例如：
+  - `OPTIONS /api/platforms` → `Allow: GET, HEAD, POST`
+  - `OPTIONS /api/settings` → `Allow: GET, HEAD, PUT`
+  - `OPTIONS /api/logs` → `Allow: DELETE, GET, HEAD`
+  - `OPTIONS /api/import` → `Allow: POST`
+  - `OPTIONS /api/platforms/reorder` → `Allow: DELETE, PUT`（`/reorder` 与 `/:id` 都匹配）
+- **路径存在但方法不允许**（如 `PATCH /api/platforms`）**不是 `405`**，而是与未注册路径相同的
+  Express 默认 404：`Content-Type: text/html; charset=utf-8`，体为
+  `<!DOCTYPE html>\n<html lang="en">…<pre>Cannot PATCH /api/platforms</pre>…\n</html>\n`。
+- **未注册的 `/api/*`**：已登录 → 同一个 Express HTML 404 页；未登录 → 先 `401` JSON。
+
 ## 数据模型约定
 
 - **ID 类型**：`Platform.id`、`Preset.id` 均为字符串（UUID v4）；`LogEntry.id` 为字符串
@@ -351,12 +383,12 @@ upsert 预设（不存在则创建；内置 id 也可覆盖保存）。
 
 | 状态 | 场景 |
 | --- | --- |
-| `200` | 成功 |
+| `200` | 成功（含自动 `OPTIONS` 方法汇总响应） |
 | `201` | 新建平台 / 预设成功 |
 | `204` | 删除平台 / 预设 / 清空日志成功（无响应体） |
 | `400` | 请求体非法 JSON（V8 文案）、请求体/字段校验失败、业务规则拒绝（如内置预设不可删） |
-| `401` | 未登录；`builtin` 登录账号或口令错误 |
-| `404` | 资源不存在；`sso` 下本地认证端点不存在；已登录访问未知 `/api/*` |
+| `401` | 未登录（任何方法都先判）；`builtin` 登录账号或口令错误 |
+| `404` | 资源不存在；`sso` 下本地认证端点不存在；已登录访问未知 `/api/*` 或「路径存在但方法不允许」（后两者为 Express HTML 404，非 405） |
 | `413` | 请求体超过 100KB |
 | `429` | 登录失败过于频繁（带 `retryAfter`） |
 | `502` | 抓取失败（validate/test/fetch 的 `{ok:false,error}`） |
