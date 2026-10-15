@@ -29,11 +29,12 @@ test: web
 race: web
 	go test $(PKGS) -count=1 -race
 
-# 聚合门禁：路由↔文档机检 + vet + 单测。退出码 0 才算过。
+# 聚合门禁：路由↔文档机检 + vet + 单测 + 迁移工具模块 vet。退出码 0 才算过。
 check: web
 	node scripts/check-api-docs.mjs
 	go vet ./...
 	go test $(PKGS) -count=1
+	cd tools/migrate-sqlite-to-mysql && go vet ./...
 
 fmt:
 	gofmt -l .

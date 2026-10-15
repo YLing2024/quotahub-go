@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 # 只监听 127.0.0.1，对外由 nginx 反代
 WorkingDirectory=/opt/quotahub-go
+# 环境变量文件：把仓库根 .env.example 复制为 /etc/quotahub-go.env 并填入实际值
 EnvironmentFile=-/etc/quotahub-go.env
 ExecStart=/opt/quotahub-go/quotahub-go
 Restart=always

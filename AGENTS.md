@@ -7,8 +7,8 @@
 ## 技术栈（固定）
 
 - HTTP：仅标准库 `net/http`；不引 Web 框架与路由库（分发顺序手写在 `internal/httpapi`）。
-- 数据库：`modernc.org/sqlite`（纯 Go、无 cgo）+ `github.com/go-sql-driver/mysql`；
-  业务 SQL 全收在 `internal/store`，方言差异在 `internal/sqlite`、`internal/mysql`。
+- 数据库：**仅 MySQL**（`github.com/go-sql-driver/mysql`）；建表与业务 SQL 全收在
+  `internal/store`，连接/DNS 细节在 `internal/mysql`。不引入 SQLite 驱动、不保留 `DB_DRIVER` 开关。
 - 采集脚本沙箱：`github.com/dop251/goja`（纯 Go JS 引擎，无 cgo），保持旧实现
   `handler/parse/extractor` 的 JS 函数契约。
 - 口令哈希：`internal/scrypt` 纯标准库实现（N=16384,r=8,p=1，与旧 `node:crypto` 参数一致）。
@@ -17,14 +17,16 @@
 - 前端：`web/`，React + Vite + TS + **Ant Design 默认设计语言**；产物经根包
   `//go:embed all:web/dist` 打进二进制。
 
-**允许的第三方依赖只有 `modernc.org/sqlite`、`github.com/go-sql-driver/mysql` 与
-`github.com/dop251/goja`**；新增依赖前先改本文件与 `/root/proj/go-rewrite/docs/00-CONVENTIONS.md`。
+**服务运行时允许的第三方依赖只有 `github.com/go-sql-driver/mysql` 与
+`github.com/dop251/goja`**；SQLite 驱动只允许出现在独立迁移工具 `tools/migrate-sqlite-to-mysql`
+（自带独立模块）。新增依赖前先改本文件与 `/root/proj/go-rewrite/docs/00-CONVENTIONS.md`。
 
 ## 目录
 
-- `cmd/quotahub-go/`：入口（装配 + 优雅退出 + `migrate-data`）。
-- `internal/store/`：账本层（SQL 与方言接口）、历史采样、账号/会话。
-- `internal/sqlite/`、`internal/mysql/`：两套薄方言（DDL / upsert / 自增回填 / 列探测 / DSN）。
+- `cmd/quotahub-go/`：入口（装配 + 优雅退出）。
+- `internal/store/`：账本层（DDL / 增量迁移 / SQL）、历史采样、账号/会话。
+- `internal/mysql/`：MySQL 连接细节（DSN 组装）。
+- `tools/migrate-sqlite-to-mysql/`：一次性迁移工具（独立模块，不进服务运行时）。
 - `internal/{model,jsonstore,platform,presets,settings,logs,collect,auth,httpapi,scrypt,httperr}/`。
 - `web/`：前端；`deploy/`：systemd / env / nginx 样例（**只提交，不安装到 /etc**）。
 
@@ -34,7 +36,7 @@
    已登录才 404。改了路由必须同步 `docs/API.md`（`make check` 会机检）。
 2. **采集语义对齐**：周期来自 `settings.collectIntervalSeconds`；抓取超时 15s；响应上限 1MB；
    失败只记运行时错误态（面板呈现），**不丢历史**；每平台历史保留最新 2000 点。
-3. **数据库迁移只做增量**：禁止 DROP / TRUNCATE / 重建表；两种方言下都要能通过同一套测试。
+3. **数据库迁移只做增量**：禁止 DROP / TRUNCATE / 重建表；`docs/DB.md` 描述的表结构变更要同笔更新。
 
 ## 红线
 
@@ -48,6 +50,7 @@
 ## 命令
 
 - `make build` / `make test` / `make race` / `make vet` / `make check`（路由文档机检 + vet + 单测）。
+- 迁移工具：`cd tools/migrate-sqlite-to-mysql && go run . --help`。
 - 依赖安装与前端命令一律带 `timeout`。
 
 ## 提交
