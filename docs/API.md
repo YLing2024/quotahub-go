@@ -48,6 +48,11 @@
 | `url` | string | 展示用链接 |
 | `createdAt` | string | 创建时间 |
 
+对外对象的**键集合忠实源记录**：源记录没有的键不下发（例如部分平台没有 `extractor` /
+`parse`）；键存在但值为空串时原样下发 `""`；未知键（如 `preset`）原样透传。`null`、缺失、
+`""` 三者互不等价，不互相顶替。已弃用的 `display` 一律剔除。新增/更新平台时请求里出现哪些键，
+就按此规则落到对外对象上。
+
 ### Preset（对外形态，含 `builtin` 标记）
 
 `id/name/fields/method/urlTemplate/headersTemplate/extractorTemplate`，内置预设额外带
