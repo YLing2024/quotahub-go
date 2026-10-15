@@ -30,13 +30,18 @@ func (db *DB) RecordSample(ctx context.Context, platformID string, value float64
 }
 
 // trimSamples 只保留某平台最新 MaxPointsPerPlatform 点（按 time, id 降序）。
+//
+// 内层 SELECT 需再套一层派生表：MySQL 不接受 DELETE 的 IN 子查询里出现 LIMIT，
+// 套一层后即等价于「保留最新 N 条、删其余」。
 func trimSamples(ctx context.Context, q Querier, platformID string) error {
 	_, err := q.ExecContext(ctx,
 		`DELETE FROM history_samples
 		 WHERE platform_id = ?
 		   AND id NOT IN (
-		     SELECT id FROM history_samples WHERE platform_id = ?
-		     ORDER BY time DESC, id DESC LIMIT ?
+		     SELECT id FROM (
+		       SELECT id FROM history_samples WHERE platform_id = ?
+		       ORDER BY time DESC, id DESC LIMIT ?
+		     ) AS keep
 		   )`,
 		platformID, platformID, MaxPointsPerPlatform)
 	return err
