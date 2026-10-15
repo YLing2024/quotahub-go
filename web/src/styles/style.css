@@ -1,0 +1,91 @@
+/* ==========================================================================
+   QuotaHub · style.css
+   — 设计语言全部由 antd 5 默认主题提供; 本文件只保留布局 glue:
+     尺寸 / 栅格 / 间距 / 滚动容器 / CodeMirror 容器。
+     视觉样式(配色 / 圆角 / 字体 / 阴影)一律交给 antd, 不在源码里自定义。
+   ========================================================================== */
+
+/* ---------- 全局字体 (antd 默认字体栈) ----------
+   antd reset.css 把 html 设为纯 sans-serif, 这里按 antd 默认 token 恢复字体栈;
+   只设字体, 不覆盖任何颜色 / 字号 / 圆角。 */
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif;
+}
+
+/* ---------- 外壳布局 glue ---------- */
+
+.qh-layout {
+  min-height: 100vh;
+}
+
+.qh-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.qh-nav {
+  flex: 1;
+  min-width: 0;
+}
+
+.qh-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+/* ---------- 登录页布局 glue ---------- */
+
+.qh-auth {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+}
+
+.qh-auth-card {
+  width: 100%;
+  max-width: 360px;
+}
+
+.qh-auth-title {
+  margin: 0;
+}
+
+/* ---------- Tab 切换 (保持挂载, 仅显示/隐藏) ---------- */
+
+.tab {
+  display: none;
+}
+
+.tab.is-active {
+  display: block;
+}
+
+/* ---------- 内容区布局 glue ---------- */
+
+.main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.section {
+  padding: 48px 0 64px;
+}
+
+/* ---------- CodeMirror 6 (@uiw/react-codemirror) 容器 glue ----------
+   外观容器改由 antd token 提供(见 CodeEditor.tsx), 此处只留高度。 */
+
+.cm-editor .cm-scroller {
+  min-height: 72px;
+}

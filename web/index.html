@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 首屏绘制前按 theme_mode 落定明暗, 防止刷新闪白: data-theme 供 CSS, meta color-scheme 定 UA 画布 -->
+    <script>
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('theme_mode')
+          var mode = stored === 'light' || stored === 'dark' || stored === 'auto' ? stored : 'auto'
+          var dark =
+            mode === 'dark' ||
+            (mode === 'auto' &&
+              typeof window.matchMedia === 'function' &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          var theme = dark ? 'dark' : 'light'
+          var root = document.documentElement
+          root.setAttribute('data-theme', theme)
+          root.style.colorScheme = theme
+          var meta = document.querySelector('meta[name="color-scheme"]')
+          if (!meta) {
+            meta = document.createElement('meta')
+            meta.setAttribute('name', 'color-scheme')
+            document.head.appendChild(meta)
+          }
+          meta.setAttribute('content', theme)
+        } catch (e) {}
+      })()
+    </script>
+    <title>QuotaHub</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
