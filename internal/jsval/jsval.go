@@ -76,6 +76,14 @@ func Truthy(v any) bool {
 		return t != ""
 	case float64:
 		return t != 0 && !math.IsNaN(t)
+	case int64:
+		return t != 0
+	case int:
+		return t != 0
+	case int32:
+		return t != 0
+	case float32:
+		return t != 0
 	case map[string]any, []any:
 		return true
 	default:
@@ -96,6 +104,14 @@ func Number(v any) (float64, bool) {
 		return 0, true
 	case float64:
 		return t, true
+	case int64:
+		return float64(t), true
+	case int:
+		return float64(t), true
+	case int32:
+		return float64(t), true
+	case float32:
+		return float64(t), true
 	case string:
 		s := trimSpace(t)
 		if s == "" {
