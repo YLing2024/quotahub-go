@@ -7,6 +7,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,15 +24,23 @@ import (
 	"quotahub-go/internal/config"
 	"quotahub-go/internal/httperr"
 	"quotahub-go/internal/logs"
+	"quotahub-go/internal/model"
 	"quotahub-go/internal/platform"
 	"quotahub-go/internal/presets"
 	"quotahub-go/internal/settings"
-	"quotahub-go/internal/store"
 	"quotahub-go/internal/transfer"
 )
 
 // maxBodyBytes 是请求体上限（对齐 express.json 默认 100kb）。
 const maxBodyBytes = 100 * 1024
+
+// HistoryStore 是管理面历史查询所需的能力子集。
+//
+// 抽成接口是为了让 HTTP 契约测试可脱离真实数据库；生产实现是 *store.DB。
+type HistoryStore interface {
+	RemoveSamples(ctx context.Context, platformID string) error
+	Samples(ctx context.Context, platformID string) ([]model.SamplePoint, error)
+}
 
 // Server 聚合管理面所需的全部依赖并承载分发。
 type Server struct {
@@ -43,7 +52,7 @@ type Server struct {
 	logs      *logs.Service
 	monitor   *collect.Monitor
 	transfer  *transfer.Service
-	history   *store.DB
+	history   HistoryStore
 	assets    fs.FS
 }
 
@@ -57,7 +66,7 @@ type Deps struct {
 	Logs      *logs.Service
 	Monitor   *collect.Monitor
 	Transfer  *transfer.Service
-	History   *store.DB
+	History   HistoryStore
 	// Assets 是内嵌前端产物根（web/dist）。
 	Assets fs.FS
 }

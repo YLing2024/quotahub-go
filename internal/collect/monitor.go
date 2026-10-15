@@ -19,7 +19,6 @@ import (
 	"quotahub-go/internal/platform"
 	"quotahub-go/internal/scheduler"
 	"quotahub-go/internal/settings"
-	"quotahub-go/internal/store"
 	"quotahub-go/internal/timex"
 )
 
@@ -37,10 +36,18 @@ type RefreshResult struct {
 	Results []map[string]any `json:"results"`
 }
 
+// SampleStore 是采集链路所需的历史采样能力子集。
+//
+// 抽成接口是为了让采集状态机可脱离真实数据库测试；生产实现是 *store.DB。
+type SampleStore interface {
+	RecordSample(ctx context.Context, platformID string, value float64, at string) (bool, error)
+	LatestSample(ctx context.Context, platformID string) (*model.SamplePoint, error)
+}
+
 // Monitor 承载采集业务逻辑与运行时状态（最近失败、是否在跑、最近一轮完成信息）。
 type Monitor struct {
 	platforms *platform.Service
-	history   *store.DB
+	history   SampleStore
 	settings  *settings.Service
 	logs      *logs.Service
 	fetcher   *Fetcher
@@ -61,7 +68,7 @@ type lastError struct {
 // NewMonitor 构造采集监控。fetchTimeout/脚本超时已由上层配置层钳制。
 func NewMonitor(
 	platforms *platform.Service,
-	history *store.DB,
+	history SampleStore,
 	settingsSvc *settings.Service,
 	logsSvc *logs.Service,
 	allowPrivate bool,

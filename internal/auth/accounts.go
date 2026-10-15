@@ -32,14 +32,28 @@ type BootstrapResult struct {
 	Generated bool
 }
 
+// AccountStore 是 builtin 认证所需的账本能力子集。
+//
+// 抽成接口是为了让认证逻辑可脱离真实数据库测试；生产实现是 *store.DB。
+type AccountStore interface {
+	DeleteExpiredSessions(ctx context.Context, nowIso string) (int64, error)
+	UserCount(ctx context.Context) (int64, error)
+	InsertUser(ctx context.Context, username, passwordHash, createdAt string) error
+	InsertSession(ctx context.Context, row store.SessionRow) error
+	FindValidSession(ctx context.Context, token, nowIso string) (*store.SessionRow, error)
+	TouchSession(ctx context.Context, token, expiresAt string) error
+	FindUserByUsername(ctx context.Context, username string) (*store.UserRow, error)
+	DeleteSession(ctx context.Context, token string) error
+}
+
 // Accounts 是 builtin 认证的账号 / 会话服务。
 type Accounts struct {
-	db  *store.DB
+	db  AccountStore
 	ttl time.Duration
 }
 
 // NewAccounts 构造账号服务。
-func NewAccounts(db *store.DB, ttl time.Duration) *Accounts {
+func NewAccounts(db AccountStore, ttl time.Duration) *Accounts {
 	return &Accounts{db: db, ttl: ttl}
 }
 

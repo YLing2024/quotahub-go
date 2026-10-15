@@ -6,8 +6,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -16,29 +17,149 @@ import (
 	"quotahub-go/internal/collect"
 	"quotahub-go/internal/config"
 	"quotahub-go/internal/logs"
+	"quotahub-go/internal/model"
 	"quotahub-go/internal/platform"
 	"quotahub-go/internal/presets"
 	"quotahub-go/internal/settings"
-	"quotahub-go/internal/sqlite"
 	"quotahub-go/internal/store"
 	"quotahub-go/internal/transfer"
 )
+
+// memStore 是 HTTP 契约测试用的内存账本替身：只实现被测试路径用到的行为，
+// 让契约测试不依赖真实数据库（旧实现里 SQLite 已按 2026-10-16 口径移除）。
+type memStore struct {
+	mu       sync.Mutex
+	users    map[string]store.UserRow
+	sessions map[string]store.SessionRow
+	samples  map[string][]model.SamplePoint
+}
+
+func newMemStore() *memStore {
+	return &memStore{
+		users:    map[string]store.UserRow{},
+		sessions: map[string]store.SessionRow{},
+		samples:  map[string][]model.SamplePoint{},
+	}
+}
+
+func (m *memStore) DeleteExpiredSessions(_ context.Context, nowIso string) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var n int64
+	for token, s := range m.sessions {
+		if s.ExpiresAt <= nowIso {
+			delete(m.sessions, token)
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (m *memStore) UserCount(context.Context) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return int64(len(m.users)), nil
+}
+
+func (m *memStore) InsertUser(_ context.Context, username, passwordHash, createdAt string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.users[username] = store.UserRow{
+		ID:           int64(len(m.users) + 1),
+		Username:     username,
+		PasswordHash: passwordHash,
+		CreatedAt:    createdAt,
+	}
+	return nil
+}
+
+func (m *memStore) InsertSession(_ context.Context, row store.SessionRow) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sessions[row.Token] = row
+	return nil
+}
+
+func (m *memStore) FindValidSession(_ context.Context, token, nowIso string) (*store.SessionRow, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.sessions[token]
+	if !ok || s.ExpiresAt <= nowIso {
+		return nil, nil
+	}
+	return &s, nil
+}
+
+func (m *memStore) TouchSession(_ context.Context, token, expiresAt string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s, ok := m.sessions[token]; ok {
+		s.ExpiresAt = expiresAt
+		m.sessions[token] = s
+	}
+	return nil
+}
+
+func (m *memStore) FindUserByUsername(_ context.Context, username string) (*store.UserRow, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u, ok := m.users[username]
+	if !ok {
+		return nil, nil
+	}
+	return &u, nil
+}
+
+func (m *memStore) DeleteSession(_ context.Context, token string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.sessions, token)
+	return nil
+}
+
+func (m *memStore) RecordSample(_ context.Context, platformID string, value float64, at string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.samples[platformID] = append(m.samples[platformID], model.SamplePoint{T: at, V: value})
+	return true, nil
+}
+
+func (m *memStore) LatestSample(_ context.Context, platformID string) (*model.SamplePoint, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	list := m.samples[platformID]
+	if len(list) == 0 {
+		return nil, nil
+	}
+	last := list[len(list)-1]
+	return &last, nil
+}
+
+func (m *memStore) RemoveSamples(_ context.Context, platformID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.samples, platformID)
+	return nil
+}
+
+func (m *memStore) Samples(_ context.Context, platformID string) ([]model.SamplePoint, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := append([]model.SamplePoint(nil), m.samples[platformID]...)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].T < out[j].T })
+	return out, nil
+}
 
 type testEnv struct {
 	server *httptest.Server
 	client *http.Client
 }
 
-// newTestEnv 起一个隔离的测试服务：临时数据目录 + SQLite 库 + 内嵌占位产物。
+// newTestEnv 起一个隔离的测试服务：临时数据目录 + 内存账本替身 + 内嵌占位产物。
 func newTestEnv(t *testing.T, mode config.AuthMode) *testEnv {
 	t.Helper()
 	dir := t.TempDir()
-	ctx := context.Background()
-	db, err := store.Open(ctx, sqlite.New(), sqlite.DSN(filepath.Join(dir, "monitor.db")), 4)
-	if err != nil {
-		t.Fatalf("开库失败: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := newMemStore()
 
 	cfg := &config.Config{
 		DataDir:           dir,
@@ -47,7 +168,6 @@ func newTestEnv(t *testing.T, mode config.AuthMode) *testEnv {
 		ScriptTimeoutMs:   2000,
 		SessionTtlSeconds: 3600,
 		AllowPrivate:      true,
-		DBDriver:          config.DBDriverSQLite,
 	}
 	platformSvc := platform.New(dir)
 	presetSvc := presets.New(dir)
