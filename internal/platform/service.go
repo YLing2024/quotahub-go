@@ -219,7 +219,7 @@ func nameOrDefault(v any) string {
 	return "未命名平台"
 }
 
-// textField 复刻旧实现里 `body.x || ''` 的取值：非字符串一律视为空串。
+// textField 复刻旧实现里对 body.x 取逻辑或空串的取值：非字符串一律视为空串。
 func textField(v any) string {
 	if s, ok := v.(string); ok {
 		return s

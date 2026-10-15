@@ -1,6 +1,6 @@
 // Package jsval 复刻旧实现里对松散 JSON 的 JS 取值语义。
 //
-// 旧实现全程在 JS 里处理请求体：`body.name ?? ”`、`String(x).trim()`、`x || 默认值`、
+// 旧实现全程在 JS 里处理请求体：`body.name ?? 空串`、`String(x).trim()`、`x || 默认值`、
 // `typeof v === 'object' && !Array.isArray(v)` 等。Go 的 encoding/json 把对象解成
 // map[string]any、数组解成 []any、数字解成 float64，本包把这些判断收敛成一组小函数，
 // 让业务层写出与旧实现逐条对应的分支。
@@ -57,7 +57,7 @@ func Str(v any) string {
 	}
 }
 
-// StrOr 复刻 `String(v ?? ”)`：null/undefined 用 def，其余按 JS String() 转。
+// StrOr 复刻 `String(v ?? 空串)`：null/undefined 用 def，其余按 JS String() 转。
 func StrOr(v any, def string) string {
 	if v == nil {
 		return def
