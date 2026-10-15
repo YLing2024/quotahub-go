@@ -1,5 +1,7 @@
 # 构建产物
 /quotahub-go
+/tools/migrate-sqlite-to-mysql/migrate-sqlite-to-mysql
+/tools/migrate-sqlite-to-mysql/quotahub-migrate
 /web/dist/
 /web/node_modules/
 /web/.vite/
