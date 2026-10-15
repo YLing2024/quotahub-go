@@ -29,6 +29,7 @@ import (
 	"quotahub-go/internal/presets"
 	"quotahub-go/internal/settings"
 	"quotahub-go/internal/transfer"
+	"quotahub-go/internal/v8json"
 )
 
 // maxBodyBytes 是请求体上限（对齐 express.json 默认 100kb）。
@@ -256,7 +257,12 @@ func decodeJSONBody(r *http.Request) (any, error) {
 	}
 	var v any
 	if err := json.Unmarshal(data, &v); err != nil {
-		return nil, httperr.New(400, err.Error())
+		message := v8json.ErrorMessage(string(data))
+		if message == "" {
+			// 理论上不该发生（Go 报错而 V8 判合法）；退化为 Go 原文，避免空消息。
+			message = err.Error()
+		}
+		return nil, httperr.New(400, message)
 	}
 	if v == nil {
 		return map[string]any{}, nil
