@@ -4,8 +4,9 @@ import "testing"
 
 // TestErrorMessageMatchesV8 用真实 V8（Node）采集的报错原文做逐字节对拍。
 //
-// 文案由旧实现（Node v26 / V8 JSON.parse）实测抄录，来源表见 docs/COMPAT-JSON-ERRORS.md；
-// 其中前 11 条是验收要求的常见形态。
+// 这里测的是**裸 `JSON.parse`** 的原生文案（`ErrorMessage` 的单元口径）；旧服务的 HTTP 文案
+// 还会先过 body-parser 的 strict 首字符校验，那层由 internal/httpapi/jsonbody_test.go 对拍，
+// 两层的整体说明与完整对照表见 docs/COMPAT-JSON-ERRORS.md。
 func TestErrorMessageMatchesV8(t *testing.T) {
 	cases := []struct {
 		input string

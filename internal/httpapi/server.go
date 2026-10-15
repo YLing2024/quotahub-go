@@ -252,12 +252,18 @@ func decodeJSONBody(r *http.Request) (any, error) {
 	if len(data) > maxBodyBytes {
 		return nil, httperr.New(413, "请求体过大")
 	}
-	if len(bytes.TrimSpace(data)) == 0 {
+	if len(data) == 0 {
 		return map[string]any{}, nil
+	}
+	text := string(data)
+	// 先过 body-parser 的 strict 首字符校验：非 '{' / '[' 的输入（含全空白、`null` 等）
+	// 在旧服务上就报语法错，不能落到 encoding/json 或各路由的字段校验上。
+	if message := strictBodyParserError(text); message != "" {
+		return nil, httperr.New(400, message)
 	}
 	var v any
 	if err := json.Unmarshal(data, &v); err != nil {
-		message := v8json.ErrorMessage(string(data))
+		message := v8json.ErrorMessage(text)
 		if message == "" {
 			// 理论上不该发生（Go 报错而 V8 判合法）；退化为 Go 原文，避免空消息。
 			message = err.Error()

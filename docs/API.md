@@ -5,6 +5,9 @@
 
 - 基址：`http://127.0.0.1:19250`（`HOST`/`PORT` 可覆盖）。
 - 请求/响应均为 JSON（`Content-Type: application/json; charset=utf-8`）；请求体上限 100KB。
+- 请求体是非法 JSON 时返回 `400 {"error":"<V8 JSON.parse 原文>"}`。文案按旧服务的
+  `express.json()`（body-parser 2.3.0 strict + V8 `JSON.parse`）口径复刻，逐条对照见
+  `docs/COMPAT-JSON-ERRORS.md`。
 - 所有示例中的域名统一用 `example.com`、地址统一用 `127.0.0.1`，不含任何真实凭据。
 - 机检：`node scripts/check-api-docs.mjs`（并入 `make check`）比对源码路由与本文件标题。
 
@@ -122,7 +125,8 @@
   `format`、`url`、`display`（忽略，仅导入兼容）。字段级规范化见 Platform；`handler`/
   `extractor`/`parse` 至少一个非空，否则 `400`。
 - 成功 `201`：`{Platform}`
-- 失败 `400`：`{"error":"请求体必须是 JSON 对象"}` / `{"error":"需要配置处理函数（或旧的提取/解析函数）"}`
+- 失败 `400`：请求体非法 JSON 时为 `{"error":"<V8 JSON.parse 原文>"}`（见 `docs/COMPAT-JSON-ERRORS.md`）；
+  否则为 `{"error":"请求体必须是 JSON 对象"}` / `{"error":"需要配置处理函数（或旧的提取/解析函数）"}`
 - 副作用：写 `platforms.json`，记 `create` 日志。
 - curl：
   ```bash
@@ -350,7 +354,7 @@ upsert 预设（不存在则创建；内置 id 也可覆盖保存）。
 | `200` | 成功 |
 | `201` | 新建平台 / 预设成功 |
 | `204` | 删除平台 / 预设 / 清空日志成功（无响应体） |
-| `400` | 请求体/字段校验失败、业务规则拒绝（如内置预设不可删） |
+| `400` | 请求体非法 JSON（V8 文案）、请求体/字段校验失败、业务规则拒绝（如内置预设不可删） |
 | `401` | 未登录；`builtin` 登录账号或口令错误 |
 | `404` | 资源不存在；`sso` 下本地认证端点不存在；已登录访问未知 `/api/*` |
 | `413` | 请求体超过 100KB |
