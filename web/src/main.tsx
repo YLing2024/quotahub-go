@@ -6,6 +6,8 @@ import App from './App'
 import { useResolvedTheme } from './theme'
 import 'antd/dist/reset.css'
 import './styles/style.css'
+// 触摸/窄屏适配（≥992px 且鼠标时不生效，桌面观感不变）。
+import './styles/responsive-mobile.css'
 
 // antd 应用级上下文: 供 message / modal 等静态方法使用。
 // algorithm 跟随主题模块解析结果 (auto 跟随系统, light/dark 强制) —— 只用 antd 默认算法, 不做自定义 token 映射。

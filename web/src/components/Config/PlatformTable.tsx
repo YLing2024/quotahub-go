@@ -65,7 +65,7 @@ export default function PlatformTable({
       render: (_, p) => {
         const rm = rowMsg[p.id]
         return (
-          <Space size={0} wrap>
+          <Space size={0} wrap className="qh-actions">
             <Button type="link" size="small" title="上移" onClick={() => onMove(p.id, -1)}>
               ↑
             </Button>

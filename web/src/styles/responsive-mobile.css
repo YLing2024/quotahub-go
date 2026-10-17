@@ -1,0 +1,97 @@
+/* ==========================================================================
+   QuotaHub · responsive-mobile.css — 触摸/窄屏适配（唯一响应式断点）
+   --------------------------------------------------------------------------
+   断点条件（两者取并集，写入同一个 media query）：
+     - max-width: 991.98px  窄屏（< antd lg=992px）
+     - pointer: coarse      粗指针（触摸设备）
+   ≥992px 且鼠标（pointer: fine）时不命中本文件任何规则，桌面观感逐像素不变。
+   本文件不改配色 / 圆角 / 字体族（仍由 antd 默认设计语言提供），只调整命中区尺寸、
+   内边距与行高；全部用 `body` 前缀提高选择器权重，以稳定覆盖 antd 运行时注入的同名规则
+   （antd cssinjs 的样式标签晚于本文件插入 <head>，同权重会由后者胜出）。
+   ========================================================================== */
+
+@media (max-width: 991.98px), (pointer: coarse) {
+  /* ---------- 顶栏：收窄左右内边距，避免 390px 下按钮挤压/溢出 ---------- */
+  .qh-layout .qh-header {
+    padding-inline: 16px;
+  }
+
+  /* ---------- 触摸目标 ----------
+     主要按钮（default/middle）≥44px 高；紧凑按钮（size="small"，含次要图标与行内操作）
+     ≥32×32，保证图标按钮的中心命中区不重叠。 */
+  body .ant-btn {
+    min-height: 44px;
+  }
+  body .ant-btn.ant-btn-sm {
+    min-height: 32px;
+    min-width: 32px;
+  }
+
+  /* 弹窗 / 抽屉的关闭图标 ≥32×32 */
+  body .ant-modal-close,
+  body .ant-drawer-close {
+    min-width: 32px;
+    min-height: 32px;
+  }
+
+  /* 分段控件（顶栏主题切换 / 趋势图时间范围）档位 ≥44px */
+  body .ant-segmented-item,
+  body .ant-segmented-item-label {
+    min-height: 44px;
+    line-height: 44px;
+  }
+
+  /* 抽屉内导航项 ≥44px */
+  body .ant-menu-inline .ant-menu-item {
+    height: 44px;
+    line-height: 44px;
+  }
+
+  /* ---------- 表单控件：≥44px 高、字号 ≥16px（防 iOS 聚焦放大整页） ---------- */
+  body .ant-input,
+  body .ant-input-number,
+  body .ant-picker,
+  body .ant-input-affix-wrapper {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  /* 前后缀包装器内的裸 input 由包装器撑高，自身保持弹性、避免叠加高度 */
+  body .ant-input-affix-wrapper > .ant-input {
+    min-height: 0;
+    height: auto;
+    font-size: 16px;
+  }
+
+  /* antd Select 的实际命中区是 .ant-select-selector，而外层 .ant-select-single 有固定
+     height（token.controlHeight=32px）：只设 min-height 会被固定 height 吃掉，必须同时
+     撑高外层并校正内层行高（44 - 2px 边框 = 42px）。 */
+  body .ant-select-single {
+    height: 44px;
+    font-size: 16px;
+  }
+  body .ant-select-single .ant-select-selector {
+    height: 100%;
+    font-size: 16px;
+  }
+  body .ant-select-single .ant-select-selector .ant-select-selection-item,
+  body .ant-select-single .ant-select-selector .ant-select-selection-placeholder {
+    line-height: 42px;
+    font-size: 16px;
+  }
+  body .ant-select-single .ant-select-selection-search-input {
+    font-size: 16px;
+  }
+
+  /* CodeMirror 编辑区也是表单控件：字号提到 16px，避免聚焦时 iOS 缩放 */
+  body .cm-editor .cm-content {
+    font-size: 16px;
+  }
+
+  /* ---------- 行内相邻操作按钮：间距 ≥8px ----------
+     antd Space 的间距写在内联 style 上，需用 !important 覆盖；仅对显式标注 qh-actions
+     的操作组生效。 */
+  .qh-actions {
+    column-gap: 8px !important;
+    row-gap: 8px !important;
+  }
+}

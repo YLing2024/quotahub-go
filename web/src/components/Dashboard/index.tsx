@@ -62,7 +62,7 @@ function BalanceCardView({
       title={title}
       style={p.error ? { borderColor: token.colorError } : undefined}
       extra={
-        <Space size={4}>
+        <Space size={4} className="qh-actions">
           <Button
             size="small"
             disabled={refreshing}

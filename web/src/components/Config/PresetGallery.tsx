@@ -61,7 +61,7 @@ export default function PresetGallery({
             >
               <Typography.Text type="secondary">{p.fields.map((f) => f.label).join(' · ')}</Typography.Text>
               <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 12 }}>
-                <Space size={0} wrap>
+                <Space size={0} wrap className="qh-actions">
                   <Button type="link" size="small" onClick={() => onEdit(p)}>
                     编辑
                   </Button>
