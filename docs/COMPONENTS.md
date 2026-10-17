@@ -21,6 +21,22 @@ token，不新造色值）。新增可复用组件必须同一笔在此登记，
 | `TrendChartModal`（`components/TrendChart/TrendChartModal.tsx`） | 余额趋势图弹窗 | `id`、`name`；`onClose()` | `<TrendChartModal id={p.id} name={p.name} onClose={fn} />` | 纯逻辑在 `chartLogic.ts`；档位与自定义区间校验文案与旧实现一致 |
 | `TrendChartECharts`（`components/TrendChart/TrendChartECharts.tsx`） | ECharts 折线图（懒加载） | `points`、`winStart`、`winEnd`；`onWindowChange(start,end)` | 仅由 `TrendChartModal` 动态 import | 使 echarts 独立成 chunk、不进主入口；颜色取 antd token |
 
+## 响应式（移动端）约定
+
+- **唯一样式文件**：`web/src/styles/responsive-mobile.css`，只在
+  `@media (max-width: 991.98px), (pointer: coarse)` 内生效；≥992px 且鼠标（`pointer: fine`）
+  时不命中任何规则，桌面观感逐像素不变。所有覆盖用 `body` 前缀提高权重，稳定压过 antd 运行时
+  注入的同名规则。
+- **触摸目标**：主要按钮（default/middle）≥44px 高；`size="small"` 紧凑按钮（含次要图标与行内
+  操作）≥32×32；抽屉导航项、时间范围与主题分段控件 ≥44px。
+- **表单控件**：`Input` / `Select` / `DatePicker` 等 ≥44px 高、字号 ≥16px（防 iOS 聚焦放大）。
+  antd `Select` 命中区是内层 `.ant-select-selector`，且外层 `.ant-select-single` 固定
+  `height`，必须同时撑高外层并校正内层行高，仅设 `min-height` 无效。
+- **行内操作间距**：`Space` 间距写在行内 style 上，用标记类 `qh-actions` + 媒体查询内
+  `!important` 覆盖为 ≥8px；新增「多个相邻按钮」的操作组时给该 `Space` 加 `className="qh-actions"`。
+- **断言测试**：`web/src/responsive.test.tsx` 解析上述 CSS 规则并渲染带 `qh-actions` 的组件做
+  断言（jsdom 无真实排版，按需求书口径改为断言样式 / class；真浏览器量测见交付报告）。
+
 ## 说明
 
 - `App.tsx` 内的 `ThemeSwitcher` 为模块内私有辅助组件（宽屏内联 `Segmented` / 窄屏折叠菜单），
