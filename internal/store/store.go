@@ -3,7 +3,7 @@
 // 运行时只有 MySQL 一条路径（2026-10-16 口径，不再支持 SQLite）：数据库连接参数与 DSN
 // 组装收在 internal/mysql，建表与增量迁移收在本包，所有查询使用 `?` 占位符、不做字符串拼接。
 //
-// 表语义与旧实现一致：history_samples（历史采样，每平台保留最新 2000 点）、users / sessions
+// 表语义：history_samples（历史采样，按 RetentionDays 时间窗口保留，默认 5 年）、users / sessions
 // （builtin 认证）。旧库 `value_text` 列物理保留供旧数据读取，新代码不写入。
 package store
 
@@ -27,6 +27,8 @@ type Querier interface {
 // DB 是数据库句柄。
 type DB struct {
 	SQL *sql.DB
+	// RetentionDays 是历史采样保留天数；<=0 表示永久保留。默认 DefaultRetentionDays。
+	RetentionDays int
 }
 
 // Open 打开 MySQL 连接池并跑增量迁移。

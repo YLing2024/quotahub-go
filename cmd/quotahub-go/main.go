@@ -73,6 +73,9 @@ func serve(cfg *config.Config, logger *slog.Logger) error {
 	}
 	defer func() { _ = db.Close() }()
 
+	// 历史采样保留窗口（默认 5 年；QUOTAHUB_HISTORY_RETENTION_DAYS 覆盖）。
+	db.RetentionDays = cfg.HistoryRetentionDays
+
 	// 认证：启动时打印模式；builtin 下 users 为空时创建管理员（口令仅打印一次）。
 	fmt.Println("认证模式: " + string(cfg.AuthMode))
 	accounts := auth.NewAccounts(db, time.Duration(cfg.SessionTtlSeconds)*time.Second)

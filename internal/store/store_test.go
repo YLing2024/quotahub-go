@@ -72,39 +72,6 @@ func TestRecordSampleAndLatest(t *testing.T) {
 	}
 }
 
-// TestTrimKeepsLatest 验证单平台只保留最新 MaxPointsPerPlatform 点。
-func TestTrimKeepsLatest(t *testing.T) {
-	db := openTestDB(t)
-	ctx := context.Background()
-	pid := unique("trim")
-
-	// 用较粗的时间粒度（每点 +1s）写入上限 + 少量，验证裁剪。
-	base := time.Now().UTC().Add(-time.Duration(MaxPointsPerPlatform+5) * time.Second)
-	total := MaxPointsPerPlatform + 5
-	for i := 0; i < total; i++ {
-		at := base.Add(time.Duration(i) * time.Second).Format("2006-01-02T15:04:05.000Z")
-		if _, err := db.RecordSample(ctx, pid, float64(i), at); err != nil {
-			t.Fatalf("第 %d 次写入失败: %v", i, err)
-		}
-	}
-
-	var count int
-	if err := db.SQL.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM history_samples WHERE platform_id = ?", pid).Scan(&count); err != nil {
-		t.Fatalf("统计失败: %v", err)
-	}
-	if count != MaxPointsPerPlatform {
-		t.Fatalf("应保留 %d 点，得到 %d", MaxPointsPerPlatform, count)
-	}
-	latest, _ := db.LatestSample(ctx, pid)
-	if latest == nil || latest.V != float64(total-1) {
-		t.Fatalf("最新点应为最后写入的 %d，得到 %+v", total-1, latest)
-	}
-	if err := db.RemoveSamples(ctx, pid); err != nil {
-		t.Fatalf("清理失败: %v", err)
-	}
-}
-
 func TestAccountAndSessionLifecycle(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()

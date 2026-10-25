@@ -41,6 +41,8 @@ type Config struct {
 	AdminPassword string
 	// SessionTtlSeconds 为 builtin 会话有效期（秒）。
 	SessionTtlSeconds int
+	// HistoryRetentionDays 为历史采样保留天数（默认 1825 = 5 年，<=0 不限）。
+	HistoryRetentionDays int
 
 	// 数据库连接参数（运行时仅 MySQL）。DBDSN 非空则整体覆盖分段参数。
 	DBHost     string
@@ -108,6 +110,7 @@ func Load(get func(string) string) (*Config, error) {
 		AdminUser:         adminUser,
 		AdminPassword:     get("QUOTAHUB_ADMIN_PASSWORD"),
 		SessionTtlSeconds: pickSessionTTL(get("QUOTAHUB_SESSION_TTL_HOURS")),
+		HistoryRetentionDays: pickRetentionDays(get("QUOTAHUB_HISTORY_RETENTION_DAYS")),
 		DBHost:            db.host,
 		DBPort:            db.port,
 		DBName:            db.name,
@@ -212,4 +215,20 @@ func trimOr(raw, fallback string) string {
 func (c *Config) Describe() string {
 	dbDesc := "mysql " + c.DBName + "@" + c.DBHost + ":" + strconv.Itoa(c.DBPort)
 	return fmt.Sprintf("监听 http://%s:%d | 认证模式 %s | 数据库 %s", c.Host, c.Port, c.AuthMode, dbDesc)
+}
+
+// pickRetentionDays 解析历史采样保留天数：缺省 1825（5 年），钳制到 [1, 3650]。
+func pickRetentionDays(raw string) int {
+	n, ok := parseFloat(raw)
+	if !ok || !(n > 0) {
+		return 1825
+	}
+	d := int(math.Floor(n))
+	if d < 1 {
+		return 1
+	}
+	if d > 3650 {
+		return 3650
+	}
+	return d
 }
