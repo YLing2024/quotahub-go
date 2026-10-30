@@ -143,9 +143,9 @@ export default function App() {
     <Layout className="qh-layout">
       <Layout.Header className="qh-header" style={{ background: token.colorBgContainer }}>
         <Space size="middle" align="center">
-          <Avatar shape="square" size="large">
-            QH
-          </Avatar>
+          <Avatar shape="square" size="large" icon={
+            <svg width="26" height="26" viewBox="0 0 512 512" aria-hidden="true"><path d="M 116 300 A 140 140 0 0 1 396 300" fill="none" stroke="#111" strokeWidth="30" strokeLinecap="round"/><path d="M 326 179 A 140 140 0 0 1 396 300" fill="none" stroke="#7C3AED" strokeWidth="30" strokeLinecap="round"/><path d="M 256 300 L 330 214" fill="none" stroke="#111" strokeWidth="22" strokeLinecap="round"/><circle cx="256" cy="300" r="26" fill="#7C3AED"/></svg>
+          } />
           <Typography.Text strong>QuotaHub</Typography.Text>
         </Space>
 
