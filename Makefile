@@ -12,7 +12,7 @@ all: build
 
 # 前端产物（存在则跳过；删除 web/dist 可强制重建）。
 $(FRONTEND_DIST):
-	cd web && npm install --no-audit --no-fund && npm run build
+	cd web && pnpm install --frozen-lockfile && pnpm run build
 
 web: $(FRONTEND_DIST)
 
