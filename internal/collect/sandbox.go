@@ -34,11 +34,25 @@ var errTimeout = errors.New("脚本执行超时")
 
 // RunParse 解析函数（handler）：raw 为原始响应文本，字符串按原始值注入，代码在沙箱内自由 eval。
 func (s *Sandbox) RunParse(raw, src string) (any, error) {
+	return s.RunParseWithHeaders(raw, nil, src)
+}
+
+// RunParseWithHeaders 与 RunParse 相同，但额外把响应头以第二个参数 meta 传给脚本：
+//
+//	function (raw, meta) { meta.headers['subscription-userinfo'] }
+//
+// 机场订阅把已用/总量/到期放在 `subscription-userinfo` 响应头里而不是正文，正文只有
+// base64 节点列表，所以必须让脚本能读到头。headers 的键统一小写，值按 ", " 拼接。
+func (s *Sandbox) RunParseWithHeaders(raw string, headers map[string]string, src string) (any, error) {
 	code := strings.TrimSpace(src)
 	if code == "" {
 		return nil, errors.New("未配置解析函数")
 	}
-	v, err := s.run(map[string]any{"raw": raw}, "("+code+")(raw)")
+	meta := map[string]any{"headers": headers}
+	if headers == nil {
+		meta["headers"] = map[string]string{}
+	}
+	v, err := s.run(map[string]any{"raw": raw, "meta": meta}, "("+code+")(raw, meta)")
 	if err != nil {
 		if errors.Is(err, errTimeout) {
 			return nil, fmt.Errorf("解析函数执行超时 (%dms)", s.timeout.Milliseconds())

@@ -133,17 +133,26 @@ func (f *Fetcher) FetchBalance(ctx context.Context, target FetchTarget) (float64
 		return 0, fmt.Errorf("HTTP %d: %s", res.StatusCode, head)
 	}
 
-	value, err := f.extract(target, text)
+	value, err := f.extract(target, text, flattenHeaders(res.Header))
 	if err != nil {
 		return 0, err
 	}
 	return assertNumeric(value)
 }
 
+// flattenHeaders 把响应头摊平成「小写键 → 值」，供 handler 的第二个参数读取。
+func flattenHeaders(h http.Header) map[string]string {
+	out := make(map[string]string, len(h))
+	for k, v := range h {
+		out[strings.ToLower(k)] = strings.Join(v, ", ")
+	}
+	return out
+}
+
 // extract 复刻旧实现的三种取值模型：单函数 handler / parse+extractor / response.path。
-func (f *Fetcher) extract(target FetchTarget, text string) (any, error) {
+func (f *Fetcher) extract(target FetchTarget, text string, headers map[string]string) (any, error) {
 	if target.Handler != "" {
-		return f.sandbox.RunParse(text, target.Handler)
+		return f.sandbox.RunParseWithHeaders(text, headers, target.Handler)
 	}
 	if target.Extractor != "" || target.Parse != "" {
 		var data any
