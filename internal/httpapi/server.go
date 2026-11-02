@@ -463,7 +463,16 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 		contentType = "application/octet-stream"
 	}
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Cache-Control", "public, max-age=0")
+	// Vite 产物的文件名带内容哈希，内容变了文件名就变，所以可以永久缓存；
+	// index.html 必须每次回源，否则会一直指向旧 chunk。
+	switch {
+	case strings.HasPrefix(name, "assets/"):
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	case strings.HasSuffix(name, ".html"):
+		w.Header().Set("Cache-Control", "no-cache")
+	default:
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+	}
 	if seeker, ok := file.(io.ReadSeeker); ok {
 		http.ServeContent(w, r, name, info.ModTime(), seeker)
 		return

@@ -42,6 +42,8 @@ type RefreshResult struct {
 type SampleStore interface {
 	RecordSample(ctx context.Context, platformID string, value float64, at string) (bool, error)
 	LatestSample(ctx context.Context, platformID string) (*model.SamplePoint, error)
+	// LatestSamples 一次取回全部平台的最新采样，避免面板首页 15 个平台 15 次往返。
+	LatestSamples(ctx context.Context) (map[string]model.SamplePoint, error)
 }
 
 // Monitor 承载采集业务逻辑与运行时状态（最近失败、是否在跑、最近一轮完成信息）。
@@ -216,12 +218,18 @@ func (m *Monitor) Stop() { m.sched.Stop() }
 func (m *Monitor) BuildDashboard(ctx context.Context) (model.Dashboard, error) {
 	list := m.platforms.All()
 	cards := make([]model.BalanceCard, 0, len(list))
+	// 一条聚合查询拿全部平台的最新采样：库在云端，逐个查就是 N 次跨网往返。
+	latestByID, err := m.history.LatestSamples(ctx)
+	if err != nil {
+		return model.Dashboard{}, err
+	}
 	for _, p := range list {
-		latest, err := m.history.LatestSample(ctx, p.ID)
-		if err != nil {
-			return model.Dashboard{}, err
-		}
 		card := model.BalanceCard{ID: p.ID, Name: p.Name, URL: p.URL}
+		var latest *model.SamplePoint
+		if v, ok := latestByID[p.ID]; ok {
+			sample := v
+			latest = &sample
+		}
 		if failing, ok := m.getError(p.ID); ok && (latest == nil || failing.FetchedAt > latest.T) {
 			msg, at := failing.Error, failing.FetchedAt
 			card.Error = &msg

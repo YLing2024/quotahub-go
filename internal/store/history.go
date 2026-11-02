@@ -83,6 +83,35 @@ func (db *DB) LatestSample(ctx context.Context, platformID string) (*model.Sampl
 	return &p, nil
 }
 
+// LatestSamples 一次查出所有平台各自的最新一条采样（键为 platform_id）。
+//
+// 面板首页原来按平台逐个 LatestSample，15 个平台就是 15 次往返；库在云端（跨网 ~10ms RTT），
+// 光这一串查询就要 150–300ms。这里改成一条聚合查询，把 N+1 消掉。
+func (db *DB) LatestSamples(ctx context.Context) (map[string]model.SamplePoint, error) {
+	rows, err := db.SQL.QueryContext(ctx,
+		`SELECT h.platform_id, h.time, h.value
+		   FROM history_samples h
+		   JOIN (SELECT platform_id, MAX(time) AS mt FROM history_samples GROUP BY platform_id) m
+		     ON m.platform_id = h.platform_id AND m.mt = h.time`)
+	if err != nil {
+		return nil, fmt.Errorf("读取最新采样失败: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]model.SamplePoint{}
+	for rows.Next() {
+		var id string
+		var p model.SamplePoint
+		if err := rows.Scan(&id, &p.T, &p.V); err != nil {
+			return nil, fmt.Errorf("读取最新采样失败: %w", err)
+		}
+		out[id] = p
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("读取最新采样失败: %w", err)
+	}
+	return out, nil
+}
+
 // RemoveSamples 删除某平台的全部历史采样。
 func (db *DB) RemoveSamples(ctx context.Context, platformID string) error {
 	if platformID == "" {

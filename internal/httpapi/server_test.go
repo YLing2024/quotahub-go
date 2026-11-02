@@ -136,6 +136,18 @@ func (m *memStore) LatestSample(_ context.Context, platformID string) (*model.Sa
 	return &last, nil
 }
 
+func (m *memStore) LatestSamples(_ context.Context) (map[string]model.SamplePoint, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := map[string]model.SamplePoint{}
+	for id, list := range m.samples {
+		if len(list) > 0 {
+			out[id] = list[len(list)-1]
+		}
+	}
+	return out, nil
+}
+
 func (m *memStore) RemoveSamples(_ context.Context, platformID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

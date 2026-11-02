@@ -32,6 +32,15 @@ const TABS: Array<{ key: TabName; label: string }> = [
 
 const TAB_KEY = 'quotahub-tab'
 
+/** 平台配置页是否已挂载过：首屏不挂，点开一次后常驻。 */
+function useConfigMount(tab: TabName): boolean {
+  const [mounted, setMounted] = useState(tab === 'config')
+  useEffect(() => {
+    if (tab === 'config') setMounted(true)
+  }, [tab])
+  return mounted
+}
+
 function initialTab(): TabName {
   const saved = sessionStorage.getItem(TAB_KEY)
   return saved === 'config' || saved === 'logs' ? saved : 'dashboard'
@@ -95,6 +104,7 @@ export default function App() {
   const { token } = theme.useToken()
   const [tab, setTab] = useState<TabName>(initialTab)
   const [navOpen, setNavOpen] = useState(false)
+  const configMounted = useConfigMount(tab)
   const narrow = useNarrow()
 
   const ready = useAuthStore((s) => s.ready)
@@ -188,9 +198,10 @@ export default function App() {
           <div className={`tab${tab === 'dashboard' ? ' is-active' : ''}`}>
             <DashboardTab />
           </div>
-          {/* 平台配置页保持挂载(隐藏), CodeMirror 内容不丢 */}
+          {/* 平台配置页：第一次点开后才挂载，之后保持挂载（CodeMirror 内容不丢）。
+              一直挂载会让首屏就加载 513 KB 的编辑器 chunk —— 那也是「打开比别人慢」的一半原因。 */}
           <div className={`tab${tab === 'config' ? ' is-active' : ''}`}>
-            <ConfigTab />
+            {configMounted ? <ConfigTab /> : null}
           </div>
           {/* 日志页保持挂载, 激活时才加载(与旧版点击 tab 时加载一致) */}
           <div className={`tab${tab === 'logs' ? ' is-active' : ''}`}>

@@ -16,7 +16,7 @@ import { useMemo, useState } from 'react'
 import { Button, Col, Form, Input, Modal, Row, Select, Space } from 'antd'
 import type { HttpMethod, Preset } from '@/types'
 import { createPreset, resetPreset, updatePreset } from '@/api/endpoints'
-import CodeEditor from './CodeEditor'
+import CodeEditor from './LazyCodeEditor'
 
 const DEFAULT_HEADERS_TEMPLATE = '{\n  "Authorization": "Bearer {{token}}"\n}'
 const DEFAULT_EXTRACTOR_TEMPLATE = 'function (data) {\n  return data.balance\n}'

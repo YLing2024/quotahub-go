@@ -23,14 +23,9 @@ export default defineConfig({
       output: {
         manualChunks: {
           react: ['react', 'react-dom'],
-          codemirror: [
-            '@uiw/react-codemirror',
-            '@codemirror/state',
-            '@codemirror/view',
-            '@codemirror/lang-javascript',
-            '@codemirror/lang-json',
-            '@codemirror/theme-one-dark',
-          ],
+          // 不要给 codemirror 单独命名 chunk：一旦列进 manualChunks，Rollup 会把它提升成
+          // 入口的静态依赖，CodeEditor 的 React.lazy 就白做了（首屏照样多拉 520 KB）。
+          // 交给 Rollup 自动切分后，它只会跟着 import('./CodeEditor') 出现在异步 chunk 里。
         },
       },
     },

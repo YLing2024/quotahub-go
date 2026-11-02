@@ -27,7 +27,7 @@ import {
 } from '@/api/endpoints'
 import { useStore } from '@/store/useStore'
 import { DEFAULT_HANDLER, fmt, formatValue, resolveHandler } from '@/lib/format'
-import CodeEditor from './CodeEditor'
+import CodeEditor from './LazyCodeEditor'
 import PresetGallery from './PresetGallery'
 import PlatformTable from './PlatformTable'
 import ImportExportSection from './ImportExportSection'
