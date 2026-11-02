@@ -1,9 +1,17 @@
 package collect
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
+
+// TestMain 把整个包的测试切到进程内模式：测试二进制不是 quotahub 本体，
+// 没有 --sandbox-runner 入口，子进程协议无法在这里跑；进程内实现的语义与之一致。
+func TestMain(m *testing.M) {
+	os.Setenv("QUOTAHUB_SANDBOX_MODE", SandboxModeInline)
+	os.Exit(m.Run())
+}
 
 func TestRunParse(t *testing.T) {
 	s := NewSandbox(200)

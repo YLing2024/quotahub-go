@@ -42,6 +42,11 @@ import (
 const maxOpenConns = 16
 
 func main() {
+	// 隐藏入口：沙箱子进程。必须在任何配置/数据库初始化之前处理——它只读一次 stdin，
+	// 不碰数据库、不监听端口，跑完即退。生产上由 collect.Sandbox 以一次性子进程拉起。
+	if len(os.Args) > 1 && os.Args[1] == "--sandbox-runner" {
+		os.Exit(collect.RunSandboxRunner())
+	}
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "启动失败：%v\n", err)
 		os.Exit(1)
