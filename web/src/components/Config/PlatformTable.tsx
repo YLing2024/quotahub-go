@@ -80,12 +80,16 @@ function GripIcon() {
 
 function DragHandle() {
   const ctx = useContext(DragHandleContext)
+  // 这个项目没开 antd 的 cssVar 模式，CSS 里写 var(--ant-color-*) 取不到值、只会落到
+  // 写死的回退色（浅色下还行，深色下就是黑糊糊一片）。颜色一律从 token 走内联。
+  const { token } = theme.useToken()
   return (
     <button
       type="button"
       className="qh-drag-handle"
       aria-label="拖动排序"
       title="拖动排序（键盘：空格拿起，方向键移动，空格放下）"
+      style={{ color: token.colorTextSecondary }}
       {...(ctx?.attributes ?? {})}
       {...(ctx?.listeners ?? {})}
     >
@@ -97,12 +101,15 @@ function DragHandle() {
 /** antd Table 的自定义行：接上 dnd-kit 的 transform / transition。 */
 function SortableRow(props: HTMLAttributes<HTMLTableRowElement> & { 'data-row-key'?: string }) {
   const id = String(props['data-row-key'] ?? '')
+  const { token } = theme.useToken()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   const style: CSSProperties = {
     ...props.style,
     transform: CSS.Translate.toString(transform),
     transition,
-    ...(isDragging ? { position: 'relative', zIndex: 9, boxShadow: '0 6px 18px rgba(0,0,0,.18)' } : null),
+    ...(isDragging
+      ? { position: 'relative', zIndex: 9, boxShadow: token.boxShadowSecondary, background: token.colorBgElevated }
+      : null),
   }
   return (
     <DragHandleContext.Provider
@@ -164,7 +171,7 @@ export default function PlatformTable({
       title: '操作',
       key: 'ops',
       fixed: 'right',
-      width: 300,
+      width: 340,
       render: (_, p) => {
         const rm = rowMsg[p.id]
         return (
