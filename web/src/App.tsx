@@ -25,7 +25,7 @@ import { setThemeMode, useThemeMode, type ThemeMode } from '@/theme'
 export type TabName = 'dashboard' | 'config' | 'logs'
 
 const TABS: Array<{ key: TabName; label: string }> = [
-  { key: 'dashboard', label: '监控面板' },
+  { key: 'dashboard', label: '总览' },
   { key: 'config', label: '平台配置' },
   { key: 'logs', label: '操作日志' },
 ]

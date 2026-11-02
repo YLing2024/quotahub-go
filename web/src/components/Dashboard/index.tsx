@@ -218,12 +218,12 @@ export default function DashboardTab() {
     <>
       <section className="section">
         <Space direction="vertical" size={4}>
-          <Typography.Text type="secondary">LLM Platform · Balance Monitor</Typography.Text>
+          <Typography.Text type="secondary">Balances · Quotas · Subscriptions</Typography.Text>
           <Typography.Title level={2} style={{ margin: 0 }}>
-            LLM 平台余额监控
+            余额与订阅看板
           </Typography.Title>
           <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
-            统一查看各 LLM 平台的配额与余额。
+            一屏看完所有会耗尽、会过期的东西：LLM API 的余额与配额窗口、机场订阅的剩余流量与到期日。
             <br />
             在「平台配置」中接入平台后，可手动获取余额。
           </Typography.Paragraph>

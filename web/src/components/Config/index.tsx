@@ -253,17 +253,18 @@ export default function ConfigTab() {
   const setRowMessage = (id: string, text: string, isError?: boolean) =>
     setRowMsg((prev) => ({ ...prev, [id]: { text, error: isError } }))
 
-  const movePlatform = async (id: string, dir: -1 | 1) => {
-    const idx = platforms.findIndex((x) => x.id === id)
-    const swap = idx + dir
-    if (idx === -1 || swap < 0 || swap >= platforms.length) return
-    const next = [...platforms]
-    ;[next[idx], next[swap]] = [next[swap], next[idx]]
+  /** 拖拽排序：ids 是拖完后的完整顺序（含被拖行之外的所有平台）。 */
+  const reorderByIDs = async (ids: string[]) => {
+    const byID = new Map(platforms.map((p) => [p.id, p]))
+    const next = ids.map((id) => byID.get(id)).filter((p): p is (typeof platforms)[number] => !!p)
+    if (next.length !== platforms.length) return
+    const previous = platforms
     setPlatforms(next)
     try {
-      await reorderPlatforms(next.map((p) => p.id))
+      await reorderPlatforms(ids)
       await loadDashboard()
     } catch (err) {
+      setPlatforms(previous)
       notify(`排序失败: ${(err as Error).message}`, true)
       await loadPlatforms()
     }
@@ -369,7 +370,7 @@ export default function ConfigTab() {
             平台配置
           </Typography.Title>
           <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
-            添加需要监控的 LLM 平台，填写凭据与余额接口信息。
+            添加要盯的账户：LLM API 填余额接口与凭据，机场订阅直接贴订阅链接。
             <br />
             配置保存功能建设中。
           </Typography.Paragraph>
@@ -521,7 +522,7 @@ export default function ConfigTab() {
       <PlatformTable
         platforms={platforms}
         rowMsg={rowMsg}
-        onMove={(id, dir) => void movePlatform(id, dir)}
+        onReorder={(ids) => void reorderByIDs(ids)}
         onEdit={startEdit}
         onExport={exportPlatform}
         onTest={(id) => void testRow(id)}

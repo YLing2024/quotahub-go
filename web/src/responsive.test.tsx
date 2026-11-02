@@ -159,7 +159,7 @@ describe('操作组带 qh-actions 标记（间距规则的作用对象）', () =
       <PlatformTable
         platforms={[platform]}
         rowMsg={{}}
-        onMove={() => {}}
+        onReorder={() => {}}
         onEdit={() => {}}
         onExport={() => {}}
         onTest={() => {}}
